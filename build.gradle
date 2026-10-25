@@ -32,12 +32,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    signingConfigs {
-        debug {
-            // Keep generated development signing material outside the source tree.
-            storeFile = file("${System.getProperty('java.io.tmpdir')}/alite-debug.keystore")
-        }
-    }
     androidResources {
         // AssetManager.openFd / MediaPlayer require uncompressed audio/video.
         noCompress += ['mp3', 'ogg', 'mp4', '3gp']
