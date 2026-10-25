@@ -19,6 +19,7 @@ package de.phbouillon.android.framework.impl;
  */
 
 import java.io.IOException;
+import java.util.concurrent.locks.LockSupport;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -34,6 +35,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import de.phbouillon.android.framework.Audio;
 import de.phbouillon.android.framework.FileIO;
 import de.phbouillon.android.framework.Game;
@@ -63,15 +65,16 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 
 	private AndroidView androidView;
 	private Graphics graphics;
+	private boolean surfaceCreated;
 	private Audio audio;
 	private Input input;
 	private FileIO fileIO;
-	private Screen screen;
+	private volatile Screen screen;
 	private final int targetHeight;
 	private final int targetWidth;
 	private int deviceHeight;
 	private int deviceWidth;
-	private GLGameState state = GLGameState.Initialized;
+	private volatile GLGameState state = GLGameState.Initialized;
 	private long startTime = System.nanoTime();
 	private long lastTime = startTime;
 	private int frames = 0;
@@ -113,7 +116,11 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 		AliteLog.d("AndroidGame", "Width/Height of Device: " + deviceWidth + ", " + deviceHeight);
 		audio = new AndroidAudio(this, (AndroidFileIO) fileIO);
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-		setContentView(androidView);
+		FrameLayout container = new FrameLayout(this);
+		container.setBackgroundColor(android.graphics.Color.BLACK);
+		container.addView(androidView, new FrameLayout.LayoutParams(-1, -1));
+		setContentView(container);
+		AndroidUtil.applySafeInsets(container);
 		androidView.setFocusable(true);
 		androidView.setFocusableInTouchMode(true);
 		if (input != null) {
@@ -135,6 +142,8 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 	
 	@Override
 	public void onDestroy() {
+		if (audio != null) ((AndroidAudio) audio).dispose();
+		if (input != null) input.dispose();
 		super.onDestroy();
 	}
 
@@ -148,17 +157,20 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 	@Override
 	public void onResume() {
 		super.onResume();
+		if (audio != null) ((AndroidAudio) audio).resume();
 		if (androidView != null) {
 			androidView.onResume();
 		}
 		if (screen != null) {
 			screen.resume();
 		}
+		startTime = System.nanoTime();
 		state = GLGameState.Running;
 	}
 
 	@Override
 	public void onPause() {
+		if (audio != null) ((AndroidAudio) audio).pause();
 		super.onPause();
 		androidView.onPause();
 		SoundManager.stopAll();
@@ -251,7 +263,7 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 			x1 = rect.left;
 			x2 = rect.right;
 			height = (int) (((float) targetHeight) / xFactor);
-			y1 = rect.top + ((rect.height() - height)) >> 1;
+			y1 = rect.top + ((rect.height() - height) >> 1);
 			y2 = y1 + height;
 			scaleFactor = 1.0f / xFactor;
 		} else {
@@ -265,16 +277,25 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 		return new Rect(x1, y1, x2, y2);
 	}
 
-	@SuppressLint("NewApi")
 	@Override
 	public void onSurfaceCreated(GL10 unused, EGLConfig config) {
 		AliteLog.debugGlVendorData();
-		AliteLog.d("AndroidGame", "onSurfaceCreated is called on " + screen);
-		Point result = new Point();
-		AndroidUtil.getDisplaySize(result, getWindowManager().getDefaultDisplay());
-		deviceWidth = result.x;
-		deviceHeight = result.y;
-		
+		surfaceCreated = true;
+	}
+
+	@Override
+	public void onSurfaceChanged(GL10 unused, int width, int height) {
+		if (width <= 0 || height <= 0) return;
+		if (!surfaceCreated && width == deviceWidth && height == deviceHeight) return;
+		if (screen != null && graphics != null) {
+			// Resize/context recovery uses the existing serialized game-state path.
+			saveState();
+			SoundManager.stopAll();
+		}
+		surfaceCreated = false;
+		deviceWidth = width;
+		deviceHeight = height;
+		sizeArray = new int[] {width, height};
 		Rect aspect = calculateTargetRect(new Rect(0, 0, deviceWidth, deviceHeight));
 		float ratio = (float) aspect.width() / (float) aspect.height();
 		GlUtils.setViewport(aspect);
@@ -294,10 +315,12 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 		screen.activate();
 		screen.resume();
 		startTime = System.nanoTime();
-	}
-
-	@Override
-	public void onSurfaceChanged(GL10 unused, int width, int height) {		
+		final Rect inputArea = new Rect(aspect);
+		runOnUiThread(() -> {
+			createInputIfNecessary();
+			((AndroidInput) input).updateTransform((float) targetWidth / inputArea.width(),
+				(float) targetHeight / inputArea.height(), inputArea.left, inputArea.top);
+		});
 	}
 
 	private void drawFatalException() {
@@ -322,7 +345,8 @@ public abstract class AndroidGame extends Activity implements Game, Renderer {
 		try {
 			GLGameState state = this.state;
 			long nanoTime = System.nanoTime();
-			while ((nanoTime - startTime) < 33333333l) {
+			while ((nanoTime - startTime) < 33333333L) {
+				LockSupport.parkNanos(33333333L - (nanoTime - startTime));
 				nanoTime = System.nanoTime();
 			}
 			if (state == GLGameState.Running && getCurrentView() == androidView) {

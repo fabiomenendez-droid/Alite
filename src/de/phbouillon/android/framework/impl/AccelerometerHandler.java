@@ -106,7 +106,7 @@ public class AccelerometerHandler implements SensorEventListener, IAccelerometer
 		SensorManager manager = (SensorManager) game.getSystemService(Context.SENSOR_SERVICE);
 		if (manager.getSensorList(Sensor.TYPE_ACCELEROMETER).size() > 0) {
 			Sensor accelerometer = manager.getSensorList(Sensor.TYPE_ACCELEROMETER).get(0);
-			manager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_FASTEST);
+			manager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
 			getUpdates = true;
 		} 
 		deviceOrientationManager.enable();

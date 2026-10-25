@@ -24,13 +24,15 @@ import de.phbouillon.android.framework.Sound;
 public class AndroidSound implements Sound {
 	private final int soundId;
 	private final SoundPool soundPool;
+	private final AndroidAudio audio;
 	private int currentStreamId = -1;
 	private final SoundType soundType;
 	private long delayToNextPlay = -1;
 	
-	public AndroidSound(SoundPool soundPool, int soundId, SoundType st) {
+	public AndroidSound(SoundPool soundPool, int soundId, SoundType st, AndroidAudio audio) {
 		this.soundId = soundId;
 		this.soundPool = soundPool;
+		this.audio = audio;
 		this.soundType = st;
 	}
 
@@ -41,6 +43,7 @@ public class AndroidSound implements Sound {
 	
 	@Override
 	public void play(float volume) {
+		if (!audio.isPlaybackAllowed()) return;
 		soundPool.play(soundId, volume, volume, 0, 0, 1);
 	}
 	
@@ -55,6 +58,7 @@ public class AndroidSound implements Sound {
 	
 	@Override
 	public void repeat(float volume) {
+		if (!audio.isPlaybackAllowed()) return;
 		if (currentStreamId != -1) {
 			stop();
 		}

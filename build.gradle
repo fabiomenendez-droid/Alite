@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application' version '9.4.1'
+}
+
+android {
+    namespace = 'de.phbouillon.android.games.alite'
+    compileSdk = 35
+    buildToolsVersion = '36.0.0'
+    defaultConfig {
+        applicationId = 'de.phbouillon.android.games.alite'
+        minSdk = 23
+        targetSdk = 35
+        versionCode = 2301
+        versionName = '1.5.9-android15'
+        testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            // Archived Play expansion code is not part of the offline APK.
+            java.exclude 'com/google/**'
+            java.exclude 'de/phbouillon/android/games/alite/io/AliteDownloaderService.java'
+            java.exclude 'de/phbouillon/android/games/alite/io/AliteAlarmReceiver.java'
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+        }
+        test.java.srcDirs = ['tests/unit']
+        androidTest.java.srcDirs = ['tests/android']
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    signingConfigs {
+        debug {
+            // Keep generated development signing material outside the source tree.
+            storeFile = file("${System.getProperty('java.io.tmpdir')}/alite-debug.keystore")
+        }
+    }
+    androidResources {
+        // AssetManager.openFd / MediaPlayer require uncompressed audio/video.
+        noCompress += ['mp3', 'ogg', 'mp4', '3gp']
+    }
+    buildTypes {
+        release {
+            minifyEnabled = false
+        }
+    }
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+    androidTestImplementation 'androidx.test:rules:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+}

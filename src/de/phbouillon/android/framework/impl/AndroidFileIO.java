@@ -22,6 +22,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.RandomAccessFile;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
@@ -35,220 +36,159 @@ import java.util.zip.ZipOutputStream;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
-import android.os.Environment;
 import de.phbouillon.android.framework.FileIO;
 import de.phbouillon.android.games.alite.AliteConfig;
 import de.phbouillon.android.games.alite.io.ObbExpansionsManager;
 
 public class AndroidFileIO implements FileIO {
-	private final Context context;
-	private String externalStoragePath;
 	private final AssetManager assets;
-	private final boolean useExternalStorage;
-	
+	private final File storageRoot;
+
 	public AndroidFileIO(Context context) {
-		this.context = context;
-		this.assets = context.getAssets();
-		useExternalStorage = mountExternalStorage();		
-	}
-	
-	private final String stripPath(String fileName) {
-		return fileName.substring(fileName.lastIndexOf("/") + 1);
-	}
-	
-	private final boolean mountExternalStorage() {
-		if (externalStoragePath != null) {
-			return true;
+		assets = context.getAssets();
+		storageRoot = context.getFilesDir();
+		// Previous versions already used their own external files directory.
+		// Copy once, never delete the original, and never overwrite newer data.
+		File marker = new File(storageRoot, ".storage-v2");
+		if (!marker.exists()) {
+			try {
+				File legacy = context.getExternalFilesDir(null);
+				if (legacy != null && legacy.isDirectory()) {
+					migrateDirectory(legacy, storageRoot);
+				}
+				// Old internal-storage fallback flattened commander paths.
+				File[] flat = storageRoot.listFiles((dir, name) -> name.endsWith(".cmdr"));
+				if (flat != null) {
+					for (File commander : flat) {
+						File target = getFile("commanders/" + commander.getName());
+						if (!target.exists()) {
+							copyLegacyFile(commander, target);
+						}
+					}
+				}
+				marker.createNewFile();
+			} catch (IOException | SecurityException e) {
+				android.util.Log.w("AliteStorage", "Legacy migration incomplete; will retry", e);
+			}
 		}
-		String externalStorageState = Environment.getExternalStorageState();
-		if (Environment.MEDIA_MOUNTED.equals(externalStorageState)) {
-			this.externalStoragePath = context.getExternalFilesDir(null).getAbsolutePath() + File.separator;
-			return true;
-		}
-		return false;
 	}
-	
+
+	private static void migrateDirectory(File source, File target) throws IOException {
+		if (!target.isDirectory() && !target.mkdirs()) {
+			throw new IOException("Cannot create " + target);
+		}
+		File[] children = source.listFiles();
+		if (children == null) throw new IOException("Cannot read " + source);
+		for (File child : children) {
+			File destination = new File(target, child.getName());
+			if (child.isDirectory()) {
+				migrateDirectory(child, destination);
+			} else if (!destination.exists()) {
+				copyLegacyFile(child, destination);
+			}
+		}
+	}
+
+	private static void copyLegacyFile(File source, File target) throws IOException {
+		File parent = target.getParentFile();
+		if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("Cannot create " + parent);
+		File temporary = File.createTempFile("migration-", ".tmp", parent);
+		try {
+			try (InputStream in = new FileInputStream(source); OutputStream out = new FileOutputStream(temporary)) {
+				byte[] buffer = new byte[8192];
+				int count;
+				while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+			}
+			if (!temporary.renameTo(target)) throw new IOException("Cannot migrate " + target);
+		} finally {
+			temporary.delete();
+		}
+	}
+
 	@Override
-	public InputStream readFile(String fileName) throws IOException {		
-		if (useExternalStorage) {
-			return new FileInputStream(externalStoragePath + fileName);			
-		}
-		return context.openFileInput(stripPath(fileName));
-		
+	public InputStream readFile(String fileName) throws IOException {
+		return new FileInputStream(getFile(fileName));
 	}
 
 	@Override
 	public OutputStream writeFile(String fileName) throws IOException {
-		if (useExternalStorage) {
-			return new FileOutputStream(externalStoragePath + fileName);	
-		}
-		return context.openFileOutput(stripPath(fileName), Context.MODE_PRIVATE);
+		File file = getFile(fileName);
+		File parent = file.getParentFile();
+		if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("Cannot create " + parent);
+		return new FileOutputStream(file);
 	}
-		
+
 	@Override
 	public OutputStream appendFile(String fileName) throws IOException {
-		if (!exists(fileName)) {
-			return writeFile(fileName);
-		}
-		if (useExternalStorage) {
-			return new FileOutputStream(externalStoragePath + fileName, true);	
-		}
-		return context.openFileOutput(stripPath(fileName), Context.MODE_APPEND);
+		File file = getFile(fileName);
+		if (!file.exists()) return writeFile(fileName);
+		return new FileOutputStream(file, true);
 	}
 
 	@Override
 	public boolean exists(String fileName) throws IOException {
-		if (useExternalStorage) {
-			return new File(externalStoragePath + fileName).exists();			
-		}		
-		File file = context.getFileStreamPath(stripPath(fileName));
-		return file.exists();
+		return getFile(fileName).exists();
 	}
 
 	@Override
 	public long fileLastModifiedDate(String fileName) throws IOException {
-		if (useExternalStorage) {
-			return new File(externalStoragePath + fileName).lastModified();			
-		}		
-		File file = context.getFileStreamPath(stripPath(fileName));
-		return file.lastModified();		
+		return getFile(fileName).lastModified();
 	}
-	
+
 	@Override
 	public boolean mkDir(String fileName) throws IOException {
-		if (useExternalStorage) {
-			return new File(externalStoragePath + fileName).mkdirs();			
-		}
-		// Ignore directories if internal storage is used...
-		return true;
+		File directory = getFile(fileName);
+		return directory.isDirectory() || directory.mkdirs();
 	}
-	
+
 	public File getFile(String fileName) throws IOException {
-		if (useExternalStorage) {
-			return new File(externalStoragePath + fileName);			
-		}		
-		File file = context.getFileStreamPath(stripPath(fileName));
-		return file;		
+		File file = new File(storageRoot, fileName).getCanonicalFile();
+		String root = storageRoot.getCanonicalPath();
+		if (!file.getPath().equals(root) && !file.getPath().startsWith(root + File.separator)) {
+			throw new IOException("Path outside app storage: " + fileName);
+		}
+		return file;
 	}
-	
+
 	@Override
 	public byte[] readFileContents(String fileName) throws IOException {
-		FileInputStream fin = null;
-		byte [] fileContent = null;
-		try {
-			File file;
-			if (useExternalStorage) {
-				file = new File(externalStoragePath + fileName);
-				fin = new FileInputStream(file);
-			} else {
-				file = context.getFileStreamPath(stripPath(fileName));
-				fin = context.openFileInput(stripPath(fileName));
-			}
-		    fileContent = new byte[(int) file.length()];
-		    fin.read(fileContent);			
-		} finally {
-			if (fin != null) {
-				fin.close();
-			}
-		}
-		return fileContent;
+		return readFileContents(fileName, 0);
 	}
 
 	@Override
 	public byte[] readPartialFileContents(String fileName, int length) throws IOException {
-		FileInputStream fin = null;
-		byte [] fileContent = null;
-		try {
-			File file;
-			if (useExternalStorage) {
-				file = new File(externalStoragePath + fileName);
-				fin = new FileInputStream(file);
-			} else {
-				file = context.getFileStreamPath(stripPath(fileName));
-				fin = context.openFileInput(stripPath(fileName));
-			}
-		    fileContent = new byte[length];
-		    fin.read(fileContent);			
-		} finally {
-			if (fin != null) {
-				fin.close();
-			}
-		}
-		return fileContent;
+		return readPartialFileContents(fileName, 0, length);
 	}
 
 	@Override
 	public byte[] readPartialFileContents(String fileName, int fromOffset, int length) throws IOException {
-		FileInputStream fin = null;
-		byte [] fileContent = null;
-		try {
-			File file;
-			if (useExternalStorage) {
-				file = new File(externalStoragePath + fileName);
-				fin = new FileInputStream(file);
-			} else {
-				file = context.getFileStreamPath(stripPath(fileName));
-				fin = context.openFileInput(stripPath(fileName));
-			}
-			fileContent = new byte[fromOffset];
-			fin.read(fileContent);
-		    fileContent = new byte[length];
-		    fin.read(fileContent);			
-		} finally {
-			if (fin != null) {
-				fin.close();
-			}
+		if (fromOffset < 0 || length < 0) throw new IOException("Negative read range");
+		try (RandomAccessFile file = new RandomAccessFile(getFile(fileName), "r")) {
+			file.seek(fromOffset);
+			byte[] contents = new byte[length];
+			file.readFully(contents);
+			return contents;
 		}
-		return fileContent;
 	}
 
 	@Override
 	public byte[] readFileContents(String fileName, int fromOffset) throws IOException {
-		FileInputStream fin = null;
-		byte [] fileContent = null;
-		try {			
-			File file;
-			if (useExternalStorage) {
-				file = new File(externalStoragePath + fileName);
-				fin = new FileInputStream(file);
-			} else {
-				file = context.getFileStreamPath(stripPath(fileName));
-				fin = context.openFileInput(stripPath(fileName));
-			}
-			int bytes = (int) file.length() - fromOffset;
-			fileContent = new byte[fromOffset];
-			fin.read(fileContent);
-			fileContent = new byte[bytes];			
-		    fin.read(fileContent);			
-		} finally {
-			if (fin != null) {
-				fin.close();
-			}
-		}
-		return fileContent;
+		long length = getFile(fileName).length() - fromOffset;
+		if (length < 0 || length > Integer.MAX_VALUE) throw new IOException("Invalid read range");
+		return readPartialFileContents(fileName, fromOffset, (int) length);
 	}
 
 	@Override
 	public File[] getFiles(final String directory, final String fileNamePattern) throws IOException {
-		File root = useExternalStorage ? new File(externalStoragePath + directory + "/") :
-					context.getFilesDir();
-		return root.listFiles(new FilenameFilter() {
-			@Override
-			public boolean accept(File dir, String filename) {
-				boolean result = dir.getName().matches(directory) && filename.matches(fileNamePattern);
-				return result;
-			}
-		});
+		File[] files = getFile(directory).listFiles((dir, name) -> name.matches(fileNamePattern));
+		return files == null ? new File[0] : files;
 	}
 
 	@Override
 	public boolean deleteFile(String fileName) throws IOException {
-		if (useExternalStorage) {
-			return new File(externalStoragePath + fileName).delete();
-		}
-		return context.deleteFile(stripPath(fileName));
+		return getFile(fileName).delete();
 	}
-	
+
 	@Override
 	public boolean copyFile(String srcFileName, String dstFileName) throws IOException {		
 		BufferedOutputStream bos = new BufferedOutputStream(writeFile(dstFileName));
@@ -296,7 +236,10 @@ public class AndroidFileIO implements FileIO {
 	        int count;
 	        byte [] buffer = new byte[8192];
 	        while ((ze = zis.getNextEntry()) != null) {
-	            File file = new File(targetDirectory, ze.getName());
+	            File file = new File(targetDirectory, ze.getName()).getCanonicalFile();
+	            if (!file.getPath().startsWith(targetDirectory.getCanonicalPath() + File.separator)) {
+	                throw new IOException("Archive entry outside destination");
+	            }
 	            File dir = ze.isDirectory() ? file : file.getParentFile();
 	            if (!dir.isDirectory() && !dir.mkdirs())
 	                throw new FileNotFoundException("Failed to ensure directory: " +

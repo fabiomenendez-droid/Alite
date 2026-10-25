@@ -66,6 +66,12 @@ public class AndroidInput implements Input {
 		return accelHandler instanceof AlternativeAccelHandler;
 	}
 	
+	public void updateTransform(float scaleX, float scaleY, int offsetX, int offsetY) {
+		if (touchHandler instanceof MultiTouchHandler) {
+			((MultiTouchHandler) touchHandler).updateTransform(scaleX, scaleY, offsetX, offsetY);
+		}
+	}
+
 	public void setView(View view) {
 		if (touchHandler instanceof SingleTouchHandler) {
 			((SingleTouchHandler) touchHandler).setView(view);
