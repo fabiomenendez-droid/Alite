@@ -96,7 +96,8 @@ jobs:
           arch: x86_64
           target: default
           profile: pixel_2
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -feature -Vulkan
+          emulator-boot-timeout: 180
           disable-animations: true
           script: bash scripts/emulator-test.sh
       - uses: actions/upload-artifact@v7.0.2
