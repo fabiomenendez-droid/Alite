@@ -70,7 +70,7 @@ jobs:
   android15-emulator:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -93,12 +93,19 @@ jobs:
           emulator-build: '13025442'
           api-level: 35
           arch: x86_64
-          target: default
+          target: google_apis
           profile: pixel_2
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -feature -Vulkan
           emulator-boot-timeout: 180
           disable-animations: true
           script: bash scripts/emulator-test.sh
+      - name: Host diagnostics after emulator test
+        if: always()
+        run: |
+          mkdir -p artifacts/emulator
+          free -h > artifacts/emulator/host-memory.txt
+          sudo dmesg --ctime | grep -Ei 'out of memory|killed process|oom|qemu|segfault' | tail -n 60 > artifacts/emulator/host-kernel.txt || true
+          cat artifacts/emulator/host-memory.txt artifacts/emulator/host-kernel.txt
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
