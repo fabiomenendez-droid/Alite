@@ -43,9 +43,9 @@ Der Standard-Debug-Schlüssel ist kein dauerhafter Veröffentlichungsschlüssel.
 
 ## Teststatus
 
-Status wird nach den tatsächlich ausgeführten Builds ergänzt. Testumfang:
+Lokal bisher erfolgreich: Debug-APK gebaut, zwei JVM-Galaxietests bestanden, APK-Inhalt/Signatur/SDK/ZIP-Ausrichtung geprüft. CI und Emulator werden noch geprüft. Lint meldete zunächst ausschließlich Fehler im nicht kompilierten Play-Archiv; die Archivpfade sind deshalb gezielt von Lint ausgenommen, ohne Laufzeitprüfungen abzuschalten. Testumfang:
 
 - JVM: ursprüngliche Galaxie/Lave und deterministische Erzeugung aller acht Galaxien.
 - Paketprüfung: jedes Originalasset bytegleich, alle sechs Videos, unkomprimiertes Audio, keine nativen ABIs, Manifest SDK 23/35, Signatur und ZIP-Ausrichtung.
-- Android 15: isolierte Speichermigration, Unterverzeichnisse, Null-externes-Verzeichnis, Dateibereiche/EOF und ZIP-Pfadschutz. Spieltest: Activity-Start, GL-Fläche mit farbiger Ausgabe/Screenshots, echter Touch auf „Tap to start“, Original-Commander speichern/laden, Handels-/Galaxie-/Flugansicht und Pause/Wiederaufnahme mit gespeichertem Flugzustand.
+- Android 15: isolierte Speichermigration, Unterverzeichnisse, Null-externes-Verzeichnis, Dateibereiche/EOF und ZIP-Pfadschutz. Launcher-Test: gebündeltes Intro tatsächlich abspielen und zum Spiel wechseln. Spieltest: Activity-Start, GL-Fläche mit farbiger Ausgabe/Screenshots, echter Touch auf „Tap to start“, Original-Commander speichern/laden, Handels-/Galaxie-/Flugansicht und Pause/Wiederaufnahme mit gespeichertem Flugzustand.
 - **Physisches POCO F6/HyperOS: nicht getestet.** Audioqualität, reale Neigungssteuerung, Cutout/Gestenleisten in beiden Landscape-Richtungen, lange Flüge/Kämpfe, alle Missionen und Frametiming bleiben Gerätetests. Kompilierung, Installation, Start und ein automatisierter Spiel-Smoke-Test sind verschiedene Nachweisstufen; vollständige Spielbarkeit wird dadurch nicht garantiert.

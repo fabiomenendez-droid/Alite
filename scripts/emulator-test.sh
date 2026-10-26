@@ -14,7 +14,12 @@ adb shell wm size 2400x1080
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 1
 adb logcat -c
-adb shell am instrument -w -r de.phbouillon.android.games.alite.test/androidx.test.runner.AndroidJUnitRunner | tee artifacts/emulator/instrumentation.txt
+adb shell am instrument -w -r -e class de.phbouillon.android.games.alite.LauncherIntroTest de.phbouillon.android.games.alite.test/androidx.test.runner.AndroidJUnitRunner | tee artifacts/emulator/launcher-intro.txt
+grep -Eq 'OK \([0-9]+ tests?\)' artifacts/emulator/launcher-intro.txt
+! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|Process crashed' artifacts/emulator/launcher-intro.txt
+# Only the fresh emulator's synthetic app data is reset between the two suites.
+adb shell pm clear de.phbouillon.android.games.alite
+adb shell am instrument -w -r -e class de.phbouillon.android.games.alite.StorageCompatibilityTest,de.phbouillon.android.games.alite.Android15GameTest de.phbouillon.android.games.alite.test/androidx.test.runner.AndroidJUnitRunner | tee artifacts/emulator/instrumentation.txt
 grep -Eq 'OK \([0-9]+ tests?\)' artifacts/emulator/instrumentation.txt
 ! grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|Process crashed' artifacts/emulator/instrumentation.txt
 adb exec-out screencap -p > artifacts/emulator/final-screen.png

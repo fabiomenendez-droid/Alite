@@ -11,6 +11,8 @@ with zipfile.ZipFile(apk) as archive:
     assert archive.testzip() is None, 'Corrupt APK ZIP entry'
     assert 'AndroidManifest.xml' in archive.namelist()
     assert 'classes.dex' in archive.namelist()
+    dex = b''.join(archive.read(n) for n in archive.namelist() if n.endswith('.dex'))
+    assert b'Lcom/google/android/vending/' not in dex, 'Legacy Play classes in APK'
     count = 0
     for source in (root / 'assets').rglob('*'):
         if source.is_file():

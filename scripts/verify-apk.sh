@@ -8,7 +8,7 @@ python3 scripts/verify_apk.py "$apk"
 "$tools/apksigner" verify --verbose "$apk"
 "$tools/zipalign" -c -v 4 "$apk" > /dev/null
 badging="$("$tools/aapt" dump badging "$apk")"
-printf '%s\n' "$badging" | head -n 5
+printf '%s\n' "$badging" | sed -n '1,5p'
 [[ "$badging" == *"sdkVersion:'23'"* ]]
 [[ "$badging" == *"targetSdkVersion:'35'"* ]]
 [[ "$badging" == *"de.phbouillon.android.games.alite.AliteStartManager"* ]]
