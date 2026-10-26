@@ -57,7 +57,7 @@ public class StorageCompatibilityTest {
             files.readPartialFileContents("commanders/roundtrip.cmdr", 10);
             fail("Truncated game state must raise EOFException");
         } catch (EOFException expected) { }
-        assertTrue(files.getFile("commanders/roundtrip.cmdr").getPath().startsWith(internal.getPath()));
+        assertTrue(files.getFile("commanders/roundtrip.cmdr").getPath().startsWith(internal.getCanonicalPath() + File.separator));
     }
 
     @Test public void pathAndZipTraversalCannotEscapeAppStorage() throws Exception {
