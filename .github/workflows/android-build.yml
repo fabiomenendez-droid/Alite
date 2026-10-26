@@ -94,7 +94,7 @@ jobs:
           command -v Xvfb
           Xvfb :99 -screen 0 2400x1080x24 -nolisten tcp > "$RUNNER_TEMP/alite-xvfb.log" 2>&1 &
           for attempt in {1..20}; do
-            if xdpyinfo -display :99 > /dev/null 2>&1; then exit 0; fi
+            if [[ -S /tmp/.X11-unix/X99 ]]; then exit 0; fi
             sleep 1
           done
           cat "$RUNNER_TEMP/alite-xvfb.log"
