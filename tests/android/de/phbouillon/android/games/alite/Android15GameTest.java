@@ -67,9 +67,20 @@ public class Android15GameTest {
         down.recycle(); up.recycle();
     }
 
+    private void assertNoRenderFailure(Alite game) throws Exception {
+        onGl(game, () -> {
+            try {
+                java.lang.reflect.Field field = de.phbouillon.android.framework.impl.AndroidGame.class.getDeclaredField("fatalException");
+                field.setAccessible(true);
+                assertNull("Renderer entered the fatal-error screen", field.get(game));
+            } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+        });
+    }
+
     private void screenshot(Alite game, String name) throws Exception {
         // Let at least several complete frames reach SurfaceFlinger.
         SystemClock.sleep(1500);
+        assertNoRenderFailure(game);
         Bitmap image = instrumentation.getUiAutomation().takeScreenshot();
         assertNotNull(image);
         HashSet<Integer> colors = new HashSet<>();
