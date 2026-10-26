@@ -71,6 +71,9 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      DISPLAY: ':99'
+      LIBGL_ALWAYS_SOFTWARE: '1'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -86,16 +89,26 @@ jobs:
       - name: Enable hardware acceleration on GitHub runner
         run: |
           sudo chmod a+rw /dev/kvm
+      - name: Start Mesa software graphics display
+        run: |
+          command -v Xvfb
+          Xvfb :99 -screen 0 2400x1080x24 -nolisten tcp > "$RUNNER_TEMP/alite-xvfb.log" 2>&1 &
+          for attempt in {1..20}; do
+            if xdpyinfo -display :99 > /dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/alite-xvfb.log"
+          exit 1
       - name: Android 15 install, startup, rendering, input and save/load tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # API 35 is tested on a fixed stable emulator; 37.2.12 exited during GLES1 startup.
+          # Mesa/llvmpipe avoids the SwiftShader backend that exited during GLES1 startup.
           emulator-build: '13025442'
           api-level: 35
           arch: x86_64
           target: google_apis
           profile: pixel_2
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -feature -Vulkan
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu host -feature -Vulkan
           emulator-boot-timeout: 180
           disable-animations: true
           script: bash scripts/emulator-test.sh

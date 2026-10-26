@@ -29,6 +29,7 @@ timeout 10s adb logcat -c
 adb logcat -v threadtime > artifacts/emulator/logcat.txt 2>&1 &
 logcat_pid=$!
 run_suite de.phbouillon.android.games.alite.StorageCompatibilityTest artifacts/emulator/storage.txt
+run_suite de.phbouillon.android.games.alite.AudioCompatibilityTest artifacts/emulator/audio.txt
 run_suite de.phbouillon.android.games.alite.Android15GameTest artifacts/emulator/instrumentation.txt
 collect_evidence
 # Only the fresh emulator's synthetic app data is reset between the two suites.
