@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <lint>
+    <!-- AGP lint also visits files excluded from javac. These archived Play
+         sources are not compiled or registered in the offline application. -->
+    <issue id="all">
+        <ignore regexp="src/com/google/.*" />
+        <ignore path="src/de/phbouillon/android/games/alite/io/AliteDownloaderService.java" />
+        <ignore path="src/de/phbouillon/android/games/alite/io/AliteAlarmReceiver.java" />
+    </issue>
     <issue id="RtlHardcoded">
         <ignore path="src/de/phbouillon/android/games/alite/model/PlayerCobra.java" />
     </issue>

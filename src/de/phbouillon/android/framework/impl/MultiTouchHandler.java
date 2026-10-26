@@ -42,10 +42,10 @@ public class MultiTouchHandler implements TouchHandler {
 	private final Vector <TouchEvent> touchEvents = new Vector<TouchEvent>();
 	private final Vector <TouchEvent> retainTouchEvents = new Vector<TouchEvent>();
 	private final Vector <TouchEvent> touchEventsBuffer = new Vector<TouchEvent>();
-	private final float scaleX;
-	private final float scaleY;
-	private final int offsetX;
-	private final int offsetY;
+	private float scaleX;
+	private float scaleY;
+	private int offsetX;
+	private int offsetY;
 	private float zoomFactor = 1.0f;
 	private final ScaleGestureDetector scaleDetector;
 	private final GestureDetector sweepDetector;
@@ -80,8 +80,8 @@ public class MultiTouchHandler implements TouchHandler {
 			if (start == null) {
 				return true;
 			}
-			touchEvent.x = (int) ((start.getRawX() - offsetX) * scaleX);
-			touchEvent.y = (int) ((start.getRawY() - offsetY) * scaleY);
+			touchEvent.x = (int) ((start.getX() - offsetX) * scaleX);
+			touchEvent.y = (int) ((start.getY() - offsetY) * scaleY);
 			touchEvent.x2 = (int) (xVelocity / (100.0f / scaleX));
 			touchEvent.y2 = (int) (yVelocity / (100.0f / scaleY));
 			
@@ -112,6 +112,13 @@ public class MultiTouchHandler implements TouchHandler {
 		currentView = view;
 	}
 	
+	public synchronized void updateTransform(float scaleX, float scaleY, int offsetX, int offsetY) {
+		this.scaleX = scaleX;
+		this.scaleY = scaleY;
+		this.offsetX = offsetX;
+		this.offsetY = offsetY;
+	}
+
 	void setView(View view) {
 		if (view != currentView) {
 			currentView = view;
@@ -143,7 +150,7 @@ public class MultiTouchHandler implements TouchHandler {
 					continue;
 				}
 				int pointerId = event.getPointerId(i);
-				if (event.getAction() != MotionEvent.ACTION_MOVE && i != pointerIndex) {
+				if (action != MotionEvent.ACTION_MOVE && action != MotionEvent.ACTION_CANCEL && i != pointerIndex) {
 					continue;
 				}
 				switch (action) {

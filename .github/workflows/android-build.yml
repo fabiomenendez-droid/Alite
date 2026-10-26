@@ -1,0 +1,128 @@
+name: Alite Android 15
+
+on:
+  push:
+    branches: [android15-port]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android15-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/android15-port'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v6.4.0
+      - name: Keep generated debug signing material temporary
+        run: echo "ANDROID_USER_HOME=$RUNNER_TEMP/alite-android" >> "$GITHUB_ENV"
+      - name: Install pinned Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0' 'platform-tools'
+      - name: Build APKs, run unit tests and Android lint
+        run: ./gradlew --no-daemon --console=plain assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug
+      - name: Verify complete offline APK
+        run: bash scripts/verify-apk.sh build/outputs/apk/debug/Alite-debug.apk | tee build/apk-verification.txt
+      - name: Prepare download
+        run: |
+          mkdir -p artifacts
+          cp build/outputs/apk/debug/Alite-debug.apk artifacts/Alite-1.5.9-Android15-debug.apk
+          sha256sum artifacts/*.apk > artifacts/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: Alite-1.5.9-Android15-debug.apk
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: Alite-instrumentation-apk
+          path: build/outputs/apk/androidTest/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: Alite-build-reports
+          path: |
+            build/reports/
+            build/test-results/
+            build/apk-verification.txt
+
+  android15-emulator:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DISPLAY: ':99'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: Alite-1.5.9-Android15-debug.apk
+          path: artifacts/app
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: Alite-instrumentation-apk
+          path: artifacts/test
+      - name: Enable hardware acceleration on GitHub runner
+        run: |
+          sudo chmod a+rw /dev/kvm
+      - name: Start Mesa software graphics display
+        run: |
+          command -v Xvfb
+          Xvfb :99 -screen 0 2400x1080x24 -nolisten tcp > "$RUNNER_TEMP/alite-xvfb.log" 2>&1 &
+          for attempt in {1..20}; do
+            if [[ -S /tmp/.X11-unix/X99 ]]; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/alite-xvfb.log"
+          exit 1
+      - name: Android 15 install, startup, rendering, input and save/load tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          # Mesa/llvmpipe avoids the SwiftShader backend that exited during GLES1 startup.
+          emulator-build: '13025442'
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu host -feature -Vulkan
+          emulator-boot-timeout: 180
+          disable-animations: true
+          script: bash scripts/emulator-test.sh
+      - name: Host diagnostics after emulator test
+        if: always()
+        run: |
+          mkdir -p artifacts/emulator
+          free -h > artifacts/emulator/host-memory.txt
+          sudo dmesg --ctime | grep -Ei 'out of memory|killed process|oom|qemu|segfault' | tail -n 60 > artifacts/emulator/host-kernel.txt || true
+          cat artifacts/emulator/host-memory.txt artifacts/emulator/host-kernel.txt
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: Alite-Android15-emulator-evidence
+          path: artifacts/emulator/
+          if-no-files-found: warn
+          retention-days: 30

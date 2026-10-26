@@ -31,7 +31,6 @@ import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnErrorListener;
 import android.media.MediaPlayer.OnPreparedListener;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -194,6 +193,7 @@ public class AliteIntro extends Activity implements OnClickListener {
 			stopPosition = savedInstanceState.getInt("position");
 		}
 		setContentView(R.layout.activity_play_intro);
+		AndroidUtil.applySafeInsets(findViewById(R.id.introContainer));
 		
 		if (videoView == null) {
 			initializeVideoView();
@@ -402,24 +402,19 @@ public class AliteIntro extends Activity implements OnClickListener {
 			public void onPrepared(MediaPlayer mp) {
 				AliteLog.d("VideoView", "VideoView is prepared. Playing video.");
 				mediaPlayer = mp;
-				new AsyncTask<Void, Void, Void>() {
-					@Override
-					protected Void doInBackground(Void... params) {
-						isInPlayableState = true;
-						if (needsToPlay && isResumed) {
-							videoView.seekTo(stopPosition);
-							videoView.start();
-							needsToPlay = false;
-						}
-						return null;
-					}
-				}.execute(null, null, null);		
+				isInPlayableState = true;
+				if (needsToPlay && isResumed && !aliteStarted) {
+					videoView.seekTo(stopPosition);
+					videoView.start();
+					needsToPlay = false;
+				}
 			}
 		});		
 	}
 	
 	@Override
 	protected void onPause() {
+		isResumed = false;
 		AliteLog.d("AliteIntro.onPause", "onPause begin");
 		if (videoView == null) {
 			AliteLog.e("Alite Intro", "Video view is not found. [onPause]");
@@ -451,7 +446,7 @@ public class AliteIntro extends Activity implements OnClickListener {
 	@Override
 	public void onWindowFocusChanged(boolean hasFocus) {
 		super.onWindowFocusChanged(hasFocus);		
-		AndroidUtil.setImmersion(videoView);
+		if (hasFocus) AndroidUtil.setImmersion(videoView);
 	}
 
 	public void onClick(View v) {
